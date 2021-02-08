@@ -4,11 +4,22 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
     const get = async (req, res) => { //trazer todas as ferramentas
         const page = req.query.page || 1 //a página é passada como parâmetro da requisição (pega a página 1 como padrão)
         
-        const result = await app.db('tools').count('*').first().catch(err => res.status(500).send(err)) //quantidade total de ferramentas no banco de dados
+        let conditions = ''
+        if(req.query.tag && req.query.tag.trim() !== '') {
+            conditions = `LOWER('${req.query.tag.trim()}') = ANY("tags")`
+        } else if(req.query.search && req.query.search.trim() !== '') {
+            conditions = `LOWER("title") LIKE LOWER('%${req.query.search.trim()}%') OR
+                LOWER("description") LIKE LOWER('%${req.query.search.trim()}%') OR
+                LOWER('${req.query.search.trim()}') = ANY("tags")`
+        }
+
+        const result = await app.db('tools').whereRaw(conditions)
+            .count('*').first()
+            .catch(err => res.status(500).send(err)) //quantidade total de ferramentas no banco de dados
         const count = parseInt(result.count)
         const limit = req.query.limit || count
 
-        app.db('tools')
+        app.db('tools').whereRaw(conditions)
             .limit(limit).orderBy('id').offset(page * limit - limit) //deslocamento necessário para trazer os dados paginados
             .then(tools => res.json(tools))
             .catch(err => res.status(500).send(err)) //erro do lado do servidor
