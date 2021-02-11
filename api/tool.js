@@ -52,9 +52,14 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
 
             let toolFromDB
             if(!tool.id) { //se for uma inserção
-                toolFromDB = await app.db('tools').where({ title: tool.title }).first()
+                toolFromDB = await app.db('tools')
+                    .whereRaw('LOWER(title) = ?', tool.title.toLowerCase()).first()
+                    .catch(err => res.status(500).send(err)) //erro do lado do servidor
             } else { //update
-                toolFromDB = await app.db('tools').where({ title: tool.title }).where('id', '<>', tool.id).first()
+                toolFromDB = await app.db('tools')
+                    .whereRaw('LOWER(title) = ?', tool.title.toLowerCase())
+                    .where('id', '<>', tool.id).first()
+                    .catch(err => res.status(500).send(err)) //erro do lado do servidor
             }
             checkNotExists(toolFromDB, `There is already another tool called "${tool.title}"`)
         } catch(msg) {
