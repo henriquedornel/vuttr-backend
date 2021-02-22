@@ -1,9 +1,6 @@
 const app = require('express')()
 const consign = require('consign')
 
-const dotenv = require('dotenv')
-dotenv.config()
-
 const db = require('./config/db')
 app.db = db //esse db é o knex, passando as configurações de conexão com o banco de dados, para poder usar o app.db para fazer as operações select, insert, update, delete, etc
 

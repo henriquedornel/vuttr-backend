@@ -19,8 +19,9 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
         const count = parseInt(result.count)
         const limit = req.query.limit || count
 
-        app.db('tools').whereRaw(conditions)
-            .limit(limit).orderBy('id').offset(page * limit - limit) //deslocamento necessário para trazer os dados paginados
+        app.db('tools').whereRaw(conditions)//.where({ title: 'teste' })
+            .limit(limit).orderBy('id')
+            .offset(page * limit - limit) //deslocamento necessário para trazer os dados paginados
             .then(tools => res.json(tools))
             .catch(err => res.status(500).send(err)) //erro do lado do servidor
     }
@@ -47,8 +48,8 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
         }
 
         try {
-            checkNotEmpty(tool.title, 'Tool title is required')
-            checkNotEmpty(tool.link, 'Tool link is required')
+            checkNotEmpty(tool.title, 'messages.tool.titleRequired')
+            checkNotEmpty(tool.link, 'messages.tool.linkRequired')
 
             let toolFromDB
             if(!tool.id) { //se for uma inserção
@@ -61,7 +62,7 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
                     .where('id', '<>', tool.id).first()
                     .catch(err => res.status(500).send(err)) //erro do lado do servidor
             }
-            checkNotExists(toolFromDB, `There is already another tool called "${tool.title}"`)
+            checkNotExists(toolFromDB, 'messages.tool.exists')
         } catch(msg) {
             return res.status(400).send(msg) //erro do lado do cliente
         }
@@ -85,7 +86,7 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
         try {
             const deletedRows = await app.db('tools').where({ id: req.params.id }).del()
             try {
-                checkNotEmpty(deletedRows, 'Tool not found')
+                checkNotEmpty(deletedRows, 'messages.tool.notFound')
             } catch(msg) {
                 return res.status(400).send(msg) //erro do lado do cliente
             }
