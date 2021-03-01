@@ -5,6 +5,7 @@ const db = require('./config/db')
 app.db = db //esse db é o knex, passando as configurações de conexão com o banco de dados, para poder usar o app.db para fazer as operações select, insert, update, delete, etc
 
 consign()
+    .include('./config/passport.js') //assim vamos ter o método "authenticate" disponível, a vamos poder acessar a partir das rotas
     .then('./config/middlewares.js')
     .then('./api/validate.js')
     .then('./api') //carrega todos os outros arquivos dentro da pasta (precisam ser carregados depois de "validate.js", para que eles possam utilizar as funções de estão nesse arquivo)

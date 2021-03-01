@@ -1,9 +1,9 @@
 module.exports = app => { //retorna uma função arrow que recebe como parâmetro o app, que representa a instância do Express do "index.js", que é passado para todas as dependências que foram declaradas no then do Consign
-    const { checkNotEmpty, checkNotExists } = app.api.validate
+    const { checkNotEmpty, checkNotExists/*, checkEquals*/ } = app.api.validate
     
     const get = async (req, res) => { //trazer todas as ferramentas
         const page = req.query.page || 1 //a página é passada como parâmetro da requisição (pega a página 1 como padrão)
-        
+
         let conditions = ''
         if(req.query.tag && req.query.tag.trim() !== '') {
             conditions = `LOWER('${req.query.tag.trim()}') = ANY("tags")`
@@ -13,22 +13,24 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
                 LOWER('${req.query.search.trim()}') = ANY("tags")`
         }
 
-        const result = await app.db('tools').whereRaw(conditions)
+        const result = await app.db('tools')
+            .where({ userId: req.user.id }).whereRaw(conditions)
             .count('*').first()
             .catch(err => res.status(500).send(err)) //quantidade total de ferramentas no banco de dados
         const count = parseInt(result.count)
         const limit = req.query.limit || count
 
-        app.db('tools').whereRaw(conditions)//.where({ title: 'teste' })
+        app.db('tools').where({ userId: req.user.id })
+            .whereRaw(conditions)//.where({ title: 'teste' })
             .limit(limit).orderBy('id')
             .offset(page * limit - limit) //deslocamento necessário para trazer os dados paginados
-            .then(tools => res.json(tools))
+            .then(tools => res.json(tools)) //caso os nomes dos campos no banco de dados seguissem o padrão under_scores, aqui seria necessário fazer um map para converter para o padrão camelCase, para ser compatível com o padrão REST e com as nomenclaturas do frontend
             .catch(err => res.status(500).send(err)) //erro do lado do servidor
     }
 
     const getById = (req, res) => { //trazer uma ferramenta específica
         app.db('tools')
-            .where({ id: req.params.id })
+            .where({ id: req.params.id, userId: req.user.id })
             .first()
             .then(tool => res.json(tool))
             .catch(err => res.status(500).send(err))
@@ -37,13 +39,13 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
     const save = async (req, res) => { //função middleware que recebe como parâmetro a requisição e a resposta
         //const tool = {  ...req.body } //um JSON mandado no corpo da requisição é interceptado pelo body parser. Através do operador spread, todos os atributos que vieram no body serão espalhados e colocados no objeto tool
         const tool = { //dessa forma, só vai receber os campos que de fato forem ser persistidos no banco de dados
-            id: req.body.id,
             title: req.body.title,
             link: req.body.link,
             description: req.body.description,
-            tags: req.body.tags
+            tags: req.body.tags,
+            userId: req.user.id
         }
-        if (req.params.id) {
+        if(req.params.id) {
             tool.id = req.params.id //quando for um update, pega o id da ferramenta que foi passado como parâmetro da requisição
         }
 
@@ -54,10 +56,13 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
             let toolFromDB
             if(!tool.id) { //se for uma inserção
                 toolFromDB = await app.db('tools')
-                    .whereRaw('LOWER(title) = ?', tool.title.toLowerCase()).first()
-                    .catch(err => res.status(500).send(err)) //erro do lado do servidor
+                    .where({ userId: tool.userId })
+                    .whereRaw('LOWER(title) = ?', tool.title.toLowerCase())
+                    .first()
+                    .catch(err => res.status(500).send('err')) //erro do lado do servidor
             } else { //update
                 toolFromDB = await app.db('tools')
+                    .where({ userId: tool.userId })
                     .whereRaw('LOWER(title) = ?', tool.title.toLowerCase())
                     .where('id', '<>', tool.id).first()
                     .catch(err => res.status(500).send(err)) //erro do lado do servidor
@@ -70,7 +75,7 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
         if(tool.id) { //update
             app.db('tools')
                 .update(tool)
-                .where({ id: tool.id })
+                .where({ id: tool.id, userId: tool.userId })
                 .then(_ => res.status(200).send()) //não ocorreu nenhum erro
                 .catch(err => res.status(500).send(err)) //erro do lado do servidor
         } else { //insert
@@ -82,17 +87,19 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
 
     }
 
-    const remove = async (req, res) => {
+    const remove = async (req, res) => {        
         try {
-            const deletedRows = await app.db('tools').where({ id: req.params.id }).del()
+            const deletedTool = await app.db('tools')
+                .where({ id: req.params.id, userId: req.user.id })
+                .del()
             try {
-                checkNotEmpty(deletedRows, 'messages.tool.notFound')
+                checkNotEmpty(deletedTool, 'messages.tool.notFound')
             } catch(msg) {
                 return res.status(400).send(msg) //erro do lado do cliente
             }
             res.status(204).send() //não ocorreu nenhum erro
         } catch (msg) {
-            res.status(50).send(msg) //erro do lado do servidor
+            res.status(500).send(msg) //erro do lado do servidor
         }
     }
             
