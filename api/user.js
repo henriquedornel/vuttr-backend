@@ -3,8 +3,8 @@ const bcrypt = require('bcrypt-nodejs')
 module.exports = app => {
     const { checkNotEmpty, checkNotExists, checkEmail } = app.api.validate
 
-    const getById = (req, res) => { //trazer um usuário específico
-        app.db('users')
+    const getById = async (req, res) => { //trazer um usuário específico
+        await app.db('users')
             .select('id', 'firstname', 'lastname', 'email')
             .where({ id: req.params.id })
             .first()
@@ -20,7 +20,9 @@ module.exports = app => {
 
         user.firstname = req.body.firstname
         user.lastname = req.body.lastname
-        user.email = req.body.email
+        if(user.loginType === 'internal') {
+            user.email = req.body.email
+        }
 
         try {
             checkNotEmpty(user.firstname, 'messages.user.firstnameRequired')
@@ -36,7 +38,7 @@ module.exports = app => {
             return res.status(400).send(msg) //erro do lado do cliente
         }
 
-        app.db('users')
+        await app.db('users')
             .update(user)
             .where({ id: user.id })
             .then(_ => res.status(204).send()) //não ocorreu nenhum erro e não retornou nenhum dado

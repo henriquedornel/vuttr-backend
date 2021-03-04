@@ -1,5 +1,6 @@
 const jwt = require('jwt-simple')
 const bcrypt = require('bcrypt-nodejs')
+const { OAuth2Client } = require('google-auth-library')
 
 const dotenv = require('dotenv')
 dotenv.config()
@@ -8,7 +9,7 @@ const authSecret = process.env.AUTH_SECRET
 module.exports = app => {
     const { checkNotEmpty, checkNotExists, checkEquals, checkEmail, checkPassword } = app.api.validate
 
-    const signup = async (req, res) => {
+    const signUp = async (req, res) => {
         const user = { ...req.body } //objeto gerado pelo body-parser
 
         try {
@@ -30,25 +31,37 @@ module.exports = app => {
         user.password = encryptPassword(user.password)
         delete user.passwordConfirmation //a confirmação não será inserida no banco de dados
 
-        app.db('users')
+        user.loginType = 'internal'
+
+        await app.db('users')
             .insert(user)
             .then(_ => res.status(204).send()) //não ocorreu nenhum erro e não retornou nenhum dado
             .catch(err => res.status(500).send(err)) //erro do lado do servidor
     }
 
-    const signin = async (req, res) => {
-        if(!req.body.email || !req.body.password) {
-            return res.status(400).send('messages.user.emailPasswordRequired')
+    const signIn = async (req, res) => {
+        const isExternalLogin = req.body.loginType && req.body.loginType !== 'internal'
+
+        if(!isExternalLogin) {
+            if(!req.body.email || !req.body.password) {
+                return res.status(400).send('messages.user.emailPasswordRequired')
+            }
         }
 
         const user = await app.db('users')
             .where({ email: req.body.email }).first()
             .catch(err => res.status(500).send(err)) //erro do lado do servidor
+        if(!user) {
+            return res.status(400).send('messages.user.notFound')
+        }
+        if(user.loginType !== 'internal' && !isExternalLogin) {
+            return res.json(user.loginType)
+        }
 
-        if(!user) return res.status(400).send('messages.user.notFound')
-
-        const isMatch = bcrypt.compareSync(req.body.password, user.password) //verifica se a senha informada é equivalente à senha criptografada armazenada no banco de dados
-        if(!isMatch) return res.status(401).send('messages.user.passwordIncorrect') //código de erro para acesso não autorizado
+        if(!isExternalLogin) {
+            const isMatch = bcrypt.compareSync(req.body.password, user.password) //verifica se a senha informada é equivalente à senha criptografada armazenada no banco de dados
+            if(!isMatch) return res.status(401).send('messages.user.passwordIncorrect') //código de erro para acesso não autorizado
+        }        
 
         //o token terá uma validade, que será gerada a partir da data atual
         //Date.now() -> quantidade de milissegundos desde 01/01/1970
@@ -61,6 +74,8 @@ module.exports = app => {
             firstname: user.firstname,
             lastname: user.lastname,
             email: user.email,
+            photo: req.body.photo || null,
+            loginType: req.body.loginType || user.loginType,
             iat: now, //issued at (emitido em)
             exp: now + (60 * 60 * 24 * 3) //token será válido por 3 dias (pode fechar o browser que não vai precisar se logar novamente)
         }
@@ -69,6 +84,58 @@ module.exports = app => {
             ...payload,
             token: jwt.encode(payload, authSecret)
         }) //no momento em que isso for respondido para o usuário, o token será mandado pra ele, e qualquer nova requisição que for feita precisará conter um cabeçalho authorization. No frontend, esse token será armazenado no localStorage, e precisará fazer parte de toda nova requisição, pra dizer pro backend que ele tem um token válido (a API entregará conteúdo mediante uma prova de que o usuário está logado)
+    }
+
+    const signInWithGoogle = async (req, res) => {
+        try {
+            const clientId = req.body.clientId
+            const client = new OAuth2Client(clientId)
+            const accessToken = req.body.uc.id_token
+            const ticket = await client.verifyIdToken({
+                idToken: accessToken,
+                audience: clientId
+            })
+            const payload = ticket.getPayload()
+            if(!payload.email_verified) return res.status(401).send('messages.user.googleError')
+
+            const user = { ...payload }
+            user.firstname = user.given_name,
+            user.lastname = user.family_name,
+            user.photo = user.picture
+            user.loginType = 'google'
+            
+            const userFromDB = await app.db('users').where({ email: user.email })
+                .first().catch(err => res.status(500).send(err)) //erro do lado do servidor
+            if(userFromDB) {                
+                user.id = userFromDB.id
+            } else { //insert
+                try {
+                    checkNotEmpty(user.firstname, 'messages.user.firstnameRequired')
+                    checkNotEmpty(user.email, 'messages.user.emailRequired')
+                    checkEmail(user.email, 'messages.user.emailInvalid')
+                } catch(msg) {
+                    return res.status(400).send(msg) //erro do lado do cliente
+                }
+                
+                const newUser = {
+                    firstname: user.firstname,
+                    lastname: user.lastname,
+                    email: user.email,
+                    loginType: user.loginType
+                }
+                await app.db('users')
+                    .insert(newUser)
+                    .catch(err => res.status(500).send(err)) //erro do lado do servidor
+            }
+
+            res.json(user)
+        } catch(msg) {
+            return res.status(401).send('messages.user.googleError')
+        }
+    }
+
+    const signInWithFacebook = async (req, res) => {
+
     }
 
     const changePassword = async (req, res) => {
@@ -92,7 +159,7 @@ module.exports = app => {
 
         user.password = encryptPassword(req.body.passwordNew)
         
-        app.db('users')
+        await app.db('users')
             .update(user)
             .where({ id: user.id })
             .then(_ => res.status(204).send()) //não ocorreu nenhum erro e não retornou nenhum dado
@@ -121,5 +188,5 @@ module.exports = app => {
         return bcrypt.hashSync(password, salt) //gera o hash da senha de forma síncrona
     }
 
-    return { signup, signin, changePassword, validateToken }
+    return { signUp, signIn, signInWithGoogle, signInWithFacebook, changePassword, validateToken }
 }

@@ -20,7 +20,7 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
         const count = parseInt(result.count)
         const limit = req.query.limit || count
 
-        app.db('tools').where({ userId: req.user.id })
+        await app.db('tools').where({ userId: req.user.id })
             .whereRaw(conditions)//.where({ title: 'teste' })
             .limit(limit).orderBy('id')
             .offset(page * limit - limit) //deslocamento necessário para trazer os dados paginados
@@ -28,8 +28,8 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
             .catch(err => res.status(500).send(err)) //erro do lado do servidor
     }
 
-    const getById = (req, res) => { //trazer uma ferramenta específica
-        app.db('tools')
+    const getById = async (req, res) => { //trazer uma ferramenta específica
+        await app.db('tools')
             .where({ id: req.params.id, userId: req.user.id })
             .first()
             .then(tool => res.json(tool))
@@ -73,13 +73,13 @@ module.exports = app => { //retorna uma função arrow que recebe como parâmetr
         }
 
         if(tool.id) { //update
-            app.db('tools')
+            await app.db('tools')
                 .update(tool)
                 .where({ id: tool.id, userId: tool.userId })
                 .then(_ => res.status(200).send()) //não ocorreu nenhum erro
                 .catch(err => res.status(500).send(err)) //erro do lado do servidor
         } else { //insert
-            app.db('tools')
+            await app.db('tools')
                 .insert(tool)
                 .then(_ => res.status(201).send()) //não ocorreu nenhum erro
                 .catch(err => res.status(500).send(err)) //erro do lado do servidor

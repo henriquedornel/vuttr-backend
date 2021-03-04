@@ -12,7 +12,7 @@ module.exports = app => { //module.exports retorna uma função que recebe "app"
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken() //token JWT extraído a partir do cabeçalho da requisição; "do cabeçalho de autenticação como token do portador"
     }
 
-    const strategy = new Strategy(params, (payload, done) => { //serão passados os parâmetros definidos anteriormente, e uma função callback que vai receber o payload (o mesmo definido no signin) e a função "done"
+    const strategy = new Strategy(params, (payload, done) => { //serão passados os parâmetros definidos anteriormente, e uma função callback que vai receber o payload (o mesmo definido no signIn) e a função "done"
         app.db('users')
             .where({ id: payload.id }) //o usuário é obtido a partir do id presente no payload
             .first()
